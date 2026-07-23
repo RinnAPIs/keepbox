@@ -62,12 +62,15 @@ function renderResult(data, sourceUrl) {
   }
 
   resultArea.className = 'result-area';
-  resultArea.innerHTML = `
-    <p class="result-caption">Detected from ${escapeHtml(new URL(sourceUrl).hostname)} · ${items.length} option${items.length > 1 ? 's' : ''}</p>
-    <div class="media-list">
-      ${items.map((item, i) => renderMediaCard(item, i)).join('')}
-    </div>
-  `;
+resultArea.innerHTML = `
+<p class="result-caption">
+${escapeHtml(data.result.platform)} • ${items.length} download option${items.length > 1 ? "s" : ""}
+</p>
+
+<div class="media-list">
+${items.map((item,i)=>renderMediaCard(item,i)).join("")}
+</div>
+`;
 
   items.forEach((item, i) => {
     const btn = resultArea.querySelector(`[data-save="${i}"]`);
@@ -76,7 +79,7 @@ function renderResult(data, sourceUrl) {
 }
 
 function renderMediaCard(item, i) {
-  const mediaType = getMediaType(item.url);
+  const mediaType = getMediaType(item);
   let preview = '';
 
   if (mediaType === 'video') {
@@ -109,36 +112,53 @@ function renderMediaCard(item, i) {
   `;
 }
 
-function getMediaType(url) {
-  if (/audio=1/.test(url)) return 'audio';
-  if (/photo=1/.test(url)) return 'photo';
-  return 'video';
+function getMediaType(item) {
+  if (item.type === "audio") return "audio";
+
+  if (
+    item.type === "image" ||
+    item.type === "photo"
+  ) return "photo";
+
+  if (
+    /\.(png|jpg|jpeg|webp|gif)(\?|$)/i.test(item.url)
+  ) return "photo";
+
+  return "video";
 }
 
 function extractItems(data) {
-  const raw = data.items || data.medias || data.links || data.data || data.result || [];
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item) => {
-    const url = item.url || item.link || item.download_url || item.downloadUrl;
-    if (!url) return null;
-    return {
-      title: item.title || item.caption || '',
-      url,
-      quality: item.quality || item.type || item.format || '',
-      thumbnail: item.thumbnail || item.cover || item.image || '',
-      filename: guessFilename(url, item.title)
-    };
-  }).filter(Boolean);
-}
+  if (!data?.success || !data?.result) return [];
 
-function guessFilename(url, title) {
-  try {
-    const parsed = new URL(url);
-    const fromParam = parsed.searchParams.get('filename');
-    if (fromParam) return fromParam;
-  } catch (e) {}
-  const base = (title || 'keepbox-file').replace(/[^\w\-]+/g, '_').slice(0, 60);
-  return /audio=1/.test(url) ? `${base}.mp3` : `${base}.mp4`;
+  const result = data.result;
+  const downloads = Array.isArray(result.downloads)
+    ? result.downloads
+    : [];
+
+  return downloads
+    .map(item => ({
+      title: result.title || "",
+      url: item.url,
+      quality: item.quality || item.label || "",
+      thumbnail: result.thumbnail || "",
+      type: item.type || result.kind || "video",
+      filename: guessFilename(
+        item.url,
+        result.title,
+        item.type || result.kind
+      )
+    }))
+    .filter(x => x.url);
+}
+function guessFilename(url, title, type) {
+  const base = (title || "keepbox-file")
+    .replace(/[^\w\-]+/g, "_")
+    .slice(0, 80);
+
+  if (type === "audio") return base + ".mp3";
+  if (type === "image") return base + ".jpg";
+
+  return base + ".mp4";
 }
 
 async function saveFile(url, filename) {
